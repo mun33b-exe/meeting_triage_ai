@@ -3,8 +3,7 @@ import 'package:uuid/uuid.dart';
 enum ActionPriority { low, medium, high }
 
 /// A single task produced by an AI triage pass.
-/// `isCompleted` is intentionally mutable so the provider can toggle it
-/// in-place without rebuilding the whole meeting object graph.
+/// `isCompleted` is mutable so the provider can toggle it in-place.
 class ActionItem {
   ActionItem({
     String? id,
@@ -15,6 +14,7 @@ class ActionItem {
     this.isCompleted = false,
     this.priority = ActionPriority.medium,
     DateTime? createdAt,
+    this.meetingTitle,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -23,9 +23,50 @@ class ActionItem {
   final String title;
   final String assignedTo;
   final DateTime? dueDate;
-  bool isCompleted; // mutable — toggled via MeetingProvider.toggleActionItem
+  bool isCompleted;
   final ActionPriority priority;
   final DateTime createdAt;
+  final String? meetingTitle;
+
+  bool get isDueToday {
+    if (dueDate == null) return false;
+    final now = DateTime.now();
+    return dueDate!.year == now.year &&
+        dueDate!.month == now.month &&
+        dueDate!.day == now.day;
+  }
+
+  String get priorityLabel {
+    switch (priority) {
+      case ActionPriority.high:
+        return 'High';
+      case ActionPriority.medium:
+        return 'Med';
+      case ActionPriority.low:
+        return 'Low';
+    }
+  }
+
+  ActionItem copyWith({
+    String? title,
+    String? assignedTo,
+    DateTime? dueDate,
+    bool? isCompleted,
+    ActionPriority? priority,
+    String? meetingTitle,
+  }) {
+    return ActionItem(
+      id: id,
+      meetingId: meetingId,
+      title: title ?? this.title,
+      assignedTo: assignedTo ?? this.assignedTo,
+      dueDate: dueDate ?? this.dueDate,
+      isCompleted: isCompleted ?? this.isCompleted,
+      priority: priority ?? this.priority,
+      createdAt: createdAt,
+      meetingTitle: meetingTitle ?? this.meetingTitle,
+    );
+  }
 
   factory ActionItem.fromJson(Map<String, dynamic> json, String meetingId) {
     return ActionItem(
@@ -41,6 +82,7 @@ class ActionItem {
         (e) => e.name == (json['priority'] as String?),
         orElse: () => ActionPriority.medium,
       ),
+      meetingTitle: json['meetingTitle'] as String?,
     );
   }
 
@@ -53,5 +95,6 @@ class ActionItem {
         'isCompleted': isCompleted,
         'priority': priority.name,
         'createdAt': createdAt.toIso8601String(),
+        'meetingTitle': meetingTitle,
       };
 }

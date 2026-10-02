@@ -7,7 +7,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/synapse_logo.dart';
 import '../../data/models/meeting.dart';
 import '../../providers/meeting_provider.dart';
+import '../action_items/action_items_screen.dart';
 import '../triage/triage_screen.dart';
+import 'widgets/voice_scribe_modal.dart';
 
 /// Screen 1 — Dashboard
 /// High-information-density executive operations dashboard matching the Stitch design.
@@ -232,7 +234,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           )
                           .length,
                       onTabChanged: (index) {
-                        setState(() => _selectedFilterTab = index);
+                        if (index == 2) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ActionItemsScreen(),
+                            ),
+                          );
+                        } else {
+                          setState(() => _selectedFilterTab = index);
+                        }
                       },
                     ),
                     const SizedBox(height: 16),
@@ -263,8 +274,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             meeting: m,
                             onOpenTriage: () =>
                                 _openTriage(context, meeting: m),
-                            onQuickListen: () => _showSnack(
-                              'Playing 4:12 audio snippet for ${m.title}',
+                            onQuickListen: () => VoiceScribeModal.show(
+                              context,
+                              meeting: m,
                             ),
                             onExport: () => _showSnack(
                               'Exporting executive digest to Markdown & PDF',
@@ -274,8 +286,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     const SizedBox(height: 4),
 
-                    // Instant Scribe Banner
-                    _InstantScribeBanner(onUpload: () => _openTriage(context)),
+                    // Instant Scribe Banner — Opens Voice Scribe Modal
+                    _InstantScribeBanner(
+                      onUpload: () => VoiceScribeModal.show(context),
+                    ),
                     const SizedBox(height: 12),
 
                     // Next Calendar Sync Strip
@@ -294,15 +308,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
       bottomNavigationBar: _StitchBottomNav(
         selectedIndex: _selectedNavIndex,
         onTap: (index) {
-          setState(() => _selectedNavIndex = index);
-          if (index != 0) {
-            final label = [
-              'Dashboard',
-              'Meetings',
-              'Action Items',
-              'Settings',
-            ][index];
-            _showSnack('$label view switched');
+          if (index == 2) {
+            Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => ActionItemsScreen(
+                  onBackToDashboard: () {
+                    Navigator.pop(context);
+                    if (mounted) setState(() => _selectedNavIndex = 0);
+                  },
+                ),
+              ),
+            ).then((_) {
+              if (mounted) setState(() => _selectedNavIndex = 0);
+            });
+          } else {
+            setState(() => _selectedNavIndex = index);
+            if (index != 0) {
+              final label = [
+                'Dashboard',
+                'Meetings',
+                'Action Items',
+                'Settings',
+              ][index];
+              _showSnack('$label view switched');
+            }
           }
         },
       ),

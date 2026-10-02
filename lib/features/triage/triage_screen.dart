@@ -1,4 +1,6 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -614,8 +616,15 @@ class _ResultsSection extends StatelessWidget {
           _RiskFlagsCard(result: result),
           const SizedBox(height: 12),
         ],
-        if (result.suggestedFollowUp.isNotEmpty)
+        if (result.suggestedFollowUp.isNotEmpty) ...[
           _FollowUpCard(result: result),
+          const SizedBox(height: 16),
+        ],
+        _OperationalActionsBar(
+          meeting: meeting!,
+          result: result,
+          provider: provider,
+        ),
       ],
     );
   }
@@ -1037,95 +1046,171 @@ class _ActionItemTile extends StatelessWidget {
     return DateFormat('MMM d').format(item.dueDate!);
   }
 
+  String _getInitials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    } else if (parts.isNotEmpty && parts[0].isNotEmpty) {
+      return parts[0].substring(0, math.min(2, parts[0].length)).toUpperCase();
+    }
+    return 'UN';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final (priorityLabel, priorityColor) = switch (item.priority) {
-      ActionPriority.low => ('Low', AppColors.success),
-      ActionPriority.medium => ('Med', AppColors.warning),
-      ActionPriority.high => ('High', AppColors.danger),
+    final (priorityLabel, priorityColor, priorityBg) = switch (item.priority) {
+      ActionPriority.low => ('Low', AppColors.success, AppColors.success.withValues(alpha: 0.12)),
+      ActionPriority.medium => ('Med', AppColors.warning, AppColors.warning.withValues(alpha: 0.12)),
+      ActionPriority.high => ('High', AppColors.danger, AppColors.danger.withValues(alpha: 0.12)),
     };
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: GestureDetector(
-        onTap: onToggle,
-        behavior: HitTestBehavior.opaque,
-        child: Row(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: item.isCompleted ? const Color(0x0EFFFFFF) : const Color(0x18FFFFFF),
+          ),
+        ),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Animated checkbox
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutBack,
-              width: 20,
-              height: 20,
-              margin: const EdgeInsets.only(top: 1),
-              decoration: BoxDecoration(
-                color: item.isCompleted
-                    ? AppColors.success
-                    : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: item.isCompleted
-                      ? AppColors.success
-                      : AppColors.border,
-                  width: 1.5,
-                ),
-              ),
-              child: item.isCompleted
-                  ? const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 12)
-                  : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: GoogleFonts.inter(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Animated interactive checkbox
+                GestureDetector(
+                  onTap: onToggle,
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutBack,
+                    width: 20,
+                    height: 20,
+                    margin: const EdgeInsets.only(top: 1),
+                    decoration: BoxDecoration(
                       color: item.isCompleted
-                          ? AppColors.textMuted
-                          : AppColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.4,
-                      decoration: item.isCompleted
-                          ? TextDecoration.lineThrough
-                          : null,
-                      decorationColor: AppColors.textMuted,
+                          ? AppColors.tertiary
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: item.isCompleted
+                            ? AppColors.tertiary
+                            : AppColors.border,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: item.isCompleted
+                        ? const Icon(Icons.check_rounded,
+                            color: Colors.black, size: 12)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: onToggle,
+                    child: Text(
+                      item.title,
+                      style: GoogleFonts.inter(
+                        color: item.isCompleted
+                            ? AppColors.textMuted
+                            : AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: item.isCompleted ? FontWeight.w400 : FontWeight.w600,
+                        height: 1.4,
+                        decoration: item.isCompleted
+                            ? TextDecoration.lineThrough
+                            : null,
+                        decorationColor: AppColors.textMuted,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _MetaLabel(
-                          Icons.person_outline_rounded, item.assignedTo),
-                      if (_dueDateLabel() != null)
-                        _MetaLabel(
-                            Icons.schedule_rounded, _dueDateLabel()!),
-                      // Priority badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: priorityColor.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Assignee with Avatar initials
+                Row(
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainerHigh,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0x20FFFFFF)),
+                      ),
+                      child: Center(
                         child: Text(
-                          priorityLabel,
+                          _getInitials(item.assignedTo),
                           style: GoogleFonts.inter(
-                            color: priorityColor,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      item.assignedTo,
+                      style: GoogleFonts.inter(
+                        color: AppColors.textSecondary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    if (_dueDateLabel() != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0x0FFFFFFF),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today_rounded, size: 10, color: AppColors.outline),
+                            const SizedBox(width: 3),
+                            Text(
+                              _dueDateLabel()!,
+                              style: GoogleFonts.inter(fontSize: 10, color: AppColors.outline),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
                     ],
-                  ),
-                ],
-              ),
+                    // Priority badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: priorityBg,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: priorityColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        priorityLabel.toUpperCase(),
+                        style: GoogleFonts.inter(
+                          color: priorityColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
@@ -1134,21 +1219,248 @@ class _ActionItemTile extends StatelessWidget {
   }
 }
 
-class _MetaLabel extends StatelessWidget {
-  const _MetaLabel(this.icon, this.label);
-  final IconData icon;
-  final String label;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Operational Actions Bar: Copy Slack Digest & Sync to Linear
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OperationalActionsBar extends StatefulWidget {
+  const _OperationalActionsBar({
+    required this.meeting,
+    required this.result,
+    required this.provider,
+  });
+
+  final Meeting meeting;
+  final TriageResult result;
+  final MeetingProvider provider;
+
+  @override
+  State<_OperationalActionsBar> createState() => _OperationalActionsBarState();
+}
+
+class _OperationalActionsBarState extends State<_OperationalActionsBar> {
+  bool _isSyncing = false;
+  bool _showSuccessBanner = false;
+
+  Future<void> _syncToLinear() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    await Future<void>.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      widget.provider.syncMeetingToLinear(widget.meeting.id);
+      setState(() {
+        _isSyncing = false;
+        _showSuccessBanner = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.verified_rounded, color: AppColors.tertiary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Successfully synced ${widget.result.actionItems.length} issues to Linear Roadmap!',
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.white),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.surfaceElevated,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _copySlackDigest() async {
+    final m = widget.meeting;
+    final r = widget.result;
+    final buffer = StringBuffer();
+    buffer.writeln('*Synapse AI Executive Digest: ${m.title}*');
+    buffer.writeln('📅 ${DateFormat("EEE, MMM d, yyyy").format(m.scheduledAt)} · ${m.durationMinutes} min · ${m.participants.length} attendees\n');
+    buffer.writeln('*Executive Summary:*');
+    buffer.writeln('${r.summary}\n');
+    if (r.keyDecisions.isNotEmpty) {
+      buffer.writeln('*Key Decisions:*');
+      for (final d in r.keyDecisions) {
+        buffer.writeln('• $d');
+      }
+      buffer.writeln('');
+    }
+    if (r.actionItems.isNotEmpty) {
+      buffer.writeln('*Action Items:*');
+      for (final a in r.actionItems) {
+        final check = a.isCompleted ? '[x]' : '[ ]';
+        buffer.writeln('$check ${a.title} (@${a.assignedTo})');
+      }
+    }
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: AppColors.tertiary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Slack digest copied to clipboard!',
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.white),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.surfaceElevated,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    final isSynced = widget.meeting.status == MeetingStatus.synced || _showSuccessBanner;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 10, color: AppColors.textMuted),
-        const SizedBox(width: 3),
-        Text(label,
-            style:
-                GoogleFonts.inter(color: AppColors.textMuted, fontSize: 11)),
+        if (isSynced) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.tertiary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.tertiary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_rounded, color: AppColors.tertiary, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Synced to Linear & Jira Roadmap',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.tertiary,
+                        ),
+                      ),
+                      Text(
+                        '${widget.result.actionItems.length} tasks registered with sprint milestones',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Operational Actions Button Row
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0x14FFFFFF)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.bolt_rounded, size: 15, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'OPERATIONAL ACTIONS',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  // Copy Slack Digest
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _copySlackDigest,
+                      icon: const Icon(Icons.copy_rounded, size: 14, color: AppColors.textPrimary),
+                      label: Text(
+                        'Copy Slack Digest',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: Color(0x24FFFFFF)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+
+                  // Sync to Linear
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isSyncing || isSynced ? null : _syncToLinear,
+                      icon: _isSyncing
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Icon(
+                              isSynced ? Icons.check_circle_rounded : Icons.sync_alt_rounded,
+                              size: 15,
+                              color: isSynced ? AppColors.tertiary : Colors.white,
+                            ),
+                      label: Text(
+                        _isSyncing
+                            ? 'Syncing...'
+                            : (isSynced ? 'Linear Synced' : 'Sync to Linear'),
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isSynced ? AppColors.tertiary : Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isSynced
+                            ? AppColors.tertiary.withValues(alpha: 0.15)
+                            : AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

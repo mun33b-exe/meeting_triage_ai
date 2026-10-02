@@ -158,6 +158,17 @@ class MeetingProvider extends ChangeNotifier {
     }
   }
 
+  List<ActionItem> get allActionItems {
+    final list = <ActionItem>[];
+    for (final m in _meetings) {
+      final items = m.triageResult?.actionItems ?? [];
+      for (final a in items) {
+        list.add(a.copyWith(meetingTitle: m.title));
+      }
+    }
+    return list;
+  }
+
   /// Flips `isCompleted` on a single action item in-place.
   void toggleActionItem(String meetingId, String actionItemId) {
     final mIdx = _meetings.indexWhere((m) => m.id == meetingId);
@@ -167,6 +178,22 @@ class MeetingProvider extends ChangeNotifier {
     final aIdx = items.indexWhere((a) => a.id == actionItemId);
     if (aIdx == -1) return;
     items[aIdx].isCompleted = !items[aIdx].isCompleted;
+    notifyListeners();
+  }
+
+  /// Marks a meeting as synced to Linear with updated progress indicators.
+  void syncMeetingToLinear(String meetingId) {
+    final idx = _meetings.indexWhere((m) => m.id == meetingId);
+    if (idx == -1) return;
+    final meeting = _meetings[idx];
+    final itemsCount = meeting.triageResult?.actionItems.length ?? 0;
+    final updated = meeting.copyWith(
+      status: MeetingStatus.synced,
+      syncStatusText: 'Synced to Linear & Jira',
+      progressPercent: 1.0,
+      progressText: '$itemsCount of $itemsCount synced to Linear',
+    );
+    _meetings = List.from(_meetings)..[idx] = updated;
     notifyListeners();
   }
 
