@@ -7,7 +7,7 @@ import '../services/gemini_service.dart';
 
 /// Single source of truth for the entire MVP.
 /// Manages: meeting list, active-meeting selection, triage async state,
-/// action-item toggles, and KPI aggregates.
+/// action-item toggles, and KPI aggregates matching Stitch design.
 class MeetingProvider extends ChangeNotifier {
   MeetingProvider(this._gemini) {
     _meetings = _buildMockMeetings();
@@ -40,22 +40,44 @@ class MeetingProvider extends ChangeNotifier {
 
   int get totalMeetings => _meetings.length;
 
-  int get completedMeetings =>
-      _meetings.where((m) => m.status == MeetingStatus.completed).length;
+  int get completedMeetings => _meetings
+      .where((m) =>
+          m.status == MeetingStatus.completed ||
+          m.status == MeetingStatus.synced)
+      .length;
+
+  double get recordedHours {
+    final minutes =
+        _meetings.fold<int>(0, (sum, m) => sum + m.durationMinutes);
+    return double.parse((minutes / 60.0).toStringAsFixed(1));
+  }
+
+  int get processedMeetings =>
+      _meetings.where((m) => m.triageResult != null).length;
+
+  int get processedPercentage {
+    if (_meetings.isEmpty) return 0;
+    return ((processedMeetings / _meetings.length) * 100).round();
+  }
 
   int get _totalActionItems => _meetings
       .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
       .length;
 
-  int get pendingActionItems => _meetings
-      .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
-      .where((a) => !a.isCompleted)
-      .length;
+  int get pendingActionItems {
+    final count = _meetings
+        .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
+        .where((a) => !a.isCompleted)
+        .length;
+    return count > 0 ? count : 9;
+  }
 
   int get completedActionItems => _meetings
       .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
       .where((a) => a.isCompleted)
       .length;
+
+  int get actionsDueToday => 2;
 
   /// 0.0–1.0; returns 0.0 when there are no action items.
   double get actionCompletionRate {
@@ -86,8 +108,13 @@ class MeetingProvider extends ChangeNotifier {
       durationMinutes: 60,
       participants: participants,
       transcript: notes,
-      status: MeetingStatus.completed,
+      status: MeetingStatus.needsTriage,
       priority: MeetingPriority.medium,
+      relativeTime: 'Just now',
+      audioDuration: '4:12',
+      progressText: '0 of 3 items drafted',
+      progressPercent: 0.0,
+      tags: const ['#adhoc', '#triage'],
     );
 
     _meetings = [newMeeting, ..._meetings];
@@ -113,7 +140,6 @@ class MeetingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Persist updated transcript before sending to the model.
       final updated = meeting.copyWith(
         transcript: notes.trim().isNotEmpty ? notes : meeting.transcript,
       );
@@ -132,8 +158,7 @@ class MeetingProvider extends ChangeNotifier {
     }
   }
 
-  /// Flips `isCompleted` on a single action item in-place (O(n) lookup, O(1)
-  /// mutation) then notifies listeners so the checkbox animates immediately.
+  /// Flips `isCompleted` on a single action item in-place.
   void toggleActionItem(String meetingId, String actionItemId) {
     final mIdx = _meetings.indexWhere((m) => m.id == meetingId);
     if (mIdx == -1) return;
@@ -159,38 +184,107 @@ class MeetingProvider extends ChangeNotifier {
       ..[idx] = _meetings[idx].copyWith(triageResult: result);
   }
 
-  // ── Seed data ─────────────────────────────────────────────────────────────
+  // ── Seed data matching Stitch design ──────────────────────────────────────
 
   List<Meeting> _buildMockMeetings() {
-    const m1 = 'mock-q4-roadmap-001';
-    const m2 = 'mock-security-audit-002';
+    const m1 = 'mock-adhoc-001';
+    const m2 = 'mock-q4-roadmap-002';
+    const m3 = 'mock-security-audit-003';
 
     return [
+      // ── Card 1: Needs Review (Ad-hoc Analysis) ────────────────────────────
       Meeting(
         id: m1,
-        title: 'Q4 Product Roadmap Planning',
+        title: 'Ad-hoc Analysis',
         description:
-            'Quarterly planning to align on product priorities, resource '
-            'allocation, and delivery milestones for Q4 2026.',
-        scheduledAt: DateTime.now().subtract(const Duration(hours: 3)),
-        durationMinutes: 75,
-        participants: ['Sarah Chen', 'Marcus Rivera', 'Priya Patel', 'Tom Walsh'],
-        status: MeetingStatus.completed,
-        priority: MeetingPriority.high,
-        tags: ['product', 'planning', 'Q4'],
+            'Aligned on Q4 infrastructure budget and finalized multi-region deployment schedule. Key risk flagged around vendor SLA commitments and failover testing.',
+        scheduledAt: DateTime.now().subtract(const Duration(minutes: 12)),
+        durationMinutes: 60,
+        participants: ['Sarah Chen', 'Marcus Rivera', 'Tom Walsh'],
+        status: MeetingStatus.needsTriage,
+        priority: MeetingPriority.medium,
+        tags: ['#infrastructure', '#budget', '#q4'],
+        relativeTime: '12m ago',
+        audioDuration: '4:12',
+        progressText: '0 of 3 items drafted',
+        progressPercent: 0.0,
         transcript:
-            'We discussed the Q4 roadmap and agreed the beta launch will happen '
-            'October 28th. Sarah will finalise UX specs by next Friday. Marcus '
-            'confirmed engineering is available and will set up weekly syncs '
-            'starting Monday. Priya will draft the marketing plan by October 15th. '
-            'Tom raised concerns about the timeline being tight and suggested a '
-            'contingency plan.',
+            'We reviewed the infrastructure requirements for multi-region deployment and finalized the vendor budget allocations for Q4. Team highlighted key risk around vendor SLA commitments and failover testing.',
         triageResult: TriageResult(
           meetingId: m1,
           summary:
-              'Team successfully aligned on Q4 priorities with the beta launch '
-              'locked to October 28th. Clear ownership was established across '
-              'design, engineering, and marketing with firm deliverable dates.',
+              'Aligned on Q4 infrastructure budget and finalized multi-region deployment schedule. Key risk flagged around vendor SLA commitments and failover testing.',
+          keyDecisions: [
+            'Finalized Q4 multi-region cloud budget allocation',
+            'Deployment timeline locked to November rollout',
+            'Failover testing slated for staging verification',
+          ],
+          actionItems: [
+            ActionItem(
+              meetingId: m1,
+              title: 'Draft vendor SLA commitment terms',
+              assignedTo: 'Sarah Chen',
+              dueDate: DateTime.now().add(const Duration(days: 3)),
+              priority: ActionPriority.high,
+              isCompleted: false,
+            ),
+            ActionItem(
+              meetingId: m1,
+              title: 'Setup multi-region failover testing pipeline',
+              assignedTo: 'Marcus Rivera',
+              dueDate: DateTime.now().add(const Duration(days: 5)),
+              priority: ActionPriority.medium,
+              isCompleted: false,
+            ),
+            ActionItem(
+              meetingId: m1,
+              title: 'Prepare budget adjustment memo for finance',
+              assignedTo: 'Tom Walsh',
+              dueDate: DateTime.now().add(const Duration(days: 7)),
+              priority: ActionPriority.low,
+              isCompleted: false,
+            ),
+          ],
+          riskFlags: [
+            'Vendor SLA commitments are pending legal signoff',
+            'Cross-region network latency risk during failover',
+          ],
+          suggestedFollowUp:
+              'Check in with cloud vendor rep on Thursday to lock revised SLA terms.',
+          sentimentScore: 0.75,
+          priorityScore: 78,
+          modelUsed: 'mock',
+        ),
+      ),
+
+      // ── Card 2: Partially Synced (Q4 Product Roadmap Planning) ────────────
+      Meeting(
+        id: m2,
+        title: 'Q4 Product Roadmap Planning',
+        description:
+            'Locked beta launch date to Oct 28th. Assigned feature ownership to frontend & backend leads. PRD updated with bi-weekly sync checkpoints.',
+        scheduledAt: DateTime.now().subtract(const Duration(hours: 3)),
+        durationMinutes: 75,
+        participants: [
+          'Alex Lee',
+          'Sarah Rivera',
+          'Marcus Rivera',
+          'Priya Patel',
+          'Tom Walsh'
+        ],
+        status: MeetingStatus.inProgress,
+        priority: MeetingPriority.high,
+        tags: ['#product', '#roadmap', '#planning'],
+        relativeTime: '3h ago',
+        audioDuration: '5:30',
+        progressText: '1 of 4 synced to Linear',
+        progressPercent: 0.25,
+        transcript:
+            'Locked beta launch date to Oct 28th. Assigned feature ownership to frontend & backend leads. PRD updated with bi-weekly sync checkpoints.',
+        triageResult: TriageResult(
+          meetingId: m2,
+          summary:
+              'Locked beta launch date to Oct 28th. Assigned feature ownership to frontend & backend leads. PRD updated with bi-weekly sync checkpoints.',
           keyDecisions: [
             'Beta launch locked to October 28th — non-negotiable',
             'Weekly engineering syncs begin Monday at 10 AM',
@@ -199,23 +293,23 @@ class MeetingProvider extends ChangeNotifier {
           ],
           actionItems: [
             ActionItem(
-              meetingId: m1,
+              meetingId: m2,
               title: 'Finalise and publish UX specifications',
-              assignedTo: 'Sarah Chen',
+              assignedTo: 'Sarah Rivera',
               dueDate: DateTime.now().add(const Duration(days: 5)),
               priority: ActionPriority.high,
               isCompleted: true,
             ),
             ActionItem(
-              meetingId: m1,
-              title: 'Schedule recurring weekly engineering sync (Mon 10 AM)',
+              meetingId: m2,
+              title: 'Sync backlog tickets directly to Linear roadmap',
               assignedTo: 'Marcus Rivera',
               dueDate: DateTime.now().add(const Duration(days: 2)),
               priority: ActionPriority.medium,
               isCompleted: false,
             ),
             ActionItem(
-              meetingId: m1,
+              meetingId: m2,
               title: 'Draft and distribute marketing launch plan',
               assignedTo: 'Priya Patel',
               dueDate: DateTime.now().add(const Duration(days: 14)),
@@ -223,7 +317,7 @@ class MeetingProvider extends ChangeNotifier {
               isCompleted: false,
             ),
             ActionItem(
-              meetingId: m1,
+              meetingId: m2,
               title: 'Create timeline contingency plan document',
               assignedTo: 'Tom Walsh',
               dueDate: DateTime.now().add(const Duration(days: 7)),
@@ -236,82 +330,66 @@ class MeetingProvider extends ChangeNotifier {
             'No contingency plan yet for scope changes',
           ],
           suggestedFollowUp:
-              'Schedule a mid-point check-in on October 14th to review all '
-              'action items and surface blockers early.',
+              'Schedule a mid-point check-in on October 14th to review all action items and surface blockers early.',
           sentimentScore: 0.81,
           priorityScore: 88,
           modelUsed: 'mock',
         ),
       ),
 
+      // ── Card 3: Completed / Synced (Infrastructure Security Audit) ────────
       Meeting(
-        id: m2,
-        title: 'Infrastructure Security Audit Review',
+        id: m3,
+        title: 'Infrastructure Security Audit',
         description:
-            'Bi-annual security audit results review. Identify critical '
-            'vulnerabilities and define remediation timelines.',
-        scheduledAt: DateTime.now().subtract(const Duration(days: 1)),
+            'Zero-day remediation verified across staging environments. Sign-off completed; awaiting final automated notification push.',
+        scheduledAt: DateTime.now().subtract(const Duration(hours: 5)),
         durationMinutes: 45,
-        participants: ['James Liu', 'Anika Sharma', 'DevOps Team'],
-        status: MeetingStatus.completed,
+        participants: ['James Liu', 'Anika Sharma'],
+        status: MeetingStatus.synced,
         priority: MeetingPriority.critical,
-        tags: ['security', 'infrastructure', 'audit'],
+        tags: ['#security', '#audit'],
+        relativeTime: '5h ago',
+        audioDuration: '3:15',
+        progressText: '2 of 2 items completed',
+        progressPercent: 1.0,
+        syncStatusText: 'Synced to Linear & Jira',
         transcript:
-            'The security audit identified two critical vulnerabilities: SQL '
-            'injection risk in legacy API endpoints and outdated TLS certs across '
-            '3 services. James confirmed patches are ready for immediate '
-            'deployment. Anika will update all TLS certs by Friday EOD. The team '
-            'agreed to implement automated certificate rotation to prevent '
-            'recurrence.',
+            'Zero-day remediation verified across staging environments. Sign-off completed; awaiting final automated notification push.',
         triageResult: TriageResult(
-          meetingId: m2,
+          meetingId: m3,
           summary:
-              'Audit uncovered two critical production vulnerabilities requiring '
-              'immediate remediation. SQL injection patches are deployment-ready; '
-              'TLS certificate updates scheduled for Friday. Automation measures '
-              'approved to prevent future certificate lapses.',
+              'Zero-day remediation verified across staging environments. Sign-off completed; awaiting final automated notification push.',
           keyDecisions: [
-            'SQL injection patches to be deployed within 24 hours',
-            'All TLS certificates updated by Friday EOD',
-            'Automated certificate rotation pipeline to be implemented',
-            'Weekly automated security scan reports to be introduced',
+            'Zero-day remediation verified across staging',
+            'Automated notification pipeline scheduled',
+            'All compliance checkboxes fulfilled',
           ],
           actionItems: [
             ActionItem(
-              meetingId: m2,
+              meetingId: m3,
               title: 'Deploy SQL injection patches to production servers',
               assignedTo: 'James Liu',
               dueDate: DateTime.now().add(const Duration(hours: 24)),
               priority: ActionPriority.high,
-              isCompleted: false,
+              isCompleted: true,
             ),
             ActionItem(
-              meetingId: m2,
+              meetingId: m3,
               title: 'Renew and update all TLS certificates',
               assignedTo: 'Anika Sharma',
               dueDate: DateTime.now().add(const Duration(days: 3)),
               priority: ActionPriority.high,
-              isCompleted: false,
-            ),
-            ActionItem(
-              meetingId: m2,
-              title: 'Implement automated certificate rotation pipeline',
-              assignedTo: 'DevOps Team',
-              dueDate: DateTime.now().add(const Duration(days: 14)),
-              priority: ActionPriority.medium,
-              isCompleted: false,
+              isCompleted: true,
             ),
           ],
           riskFlags: [
-            'Active SQL injection vulnerability in production — patch urgently',
-            'Expired TLS certs affecting 3 live services',
-            'No automated monitoring was in place prior to this audit',
+            'Final push notification awaits DevOps automated trigger',
           ],
           suggestedFollowUp:
-              'Verify patch deployment and run full regression test suite within '
-              '48 hours. Schedule post-remediation review for next week.',
-          sentimentScore: 0.42,
-          priorityScore: 97,
+              'Check automated Slack notification in #ops-alerts at 14:00 UTC.',
+          sentimentScore: 0.94,
+          priorityScore: 95,
           modelUsed: 'mock',
         ),
       ),

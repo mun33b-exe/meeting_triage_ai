@@ -1,8 +1,51 @@
 import 'package:uuid/uuid.dart';
 import 'triage_result.dart';
 
-enum MeetingStatus { scheduled, inProgress, completed, cancelled }
-enum MeetingPriority { low, medium, high, critical }
+enum MeetingStatus {
+  needsTriage,
+  inProgress,
+  synced,
+  scheduled,
+  completed,
+  cancelled;
+
+  String get label {
+    switch (this) {
+      case MeetingStatus.needsTriage:
+        return 'NEEDS TRIAGE';
+      case MeetingStatus.inProgress:
+        return 'IN PROGRESS';
+      case MeetingStatus.synced:
+        return 'SYNCED';
+      case MeetingStatus.scheduled:
+        return 'SCHEDULED';
+      case MeetingStatus.completed:
+        return 'COMPLETED';
+      case MeetingStatus.cancelled:
+        return 'CANCELLED';
+    }
+  }
+}
+
+enum MeetingPriority {
+  low,
+  medium,
+  high,
+  critical;
+
+  String get label {
+    switch (this) {
+      case MeetingPriority.low:
+        return 'LOW';
+      case MeetingPriority.medium:
+        return 'MEDIUM';
+      case MeetingPriority.high:
+        return 'HIGH';
+      case MeetingPriority.critical:
+        return 'CRITICAL';
+    }
+  }
+}
 
 /// Root aggregate — fully immutable. Use `copyWith` to produce new instances
 /// with changed fields; the provider holds the canonical list.
@@ -20,6 +63,11 @@ class Meeting {
     this.tags = const [],
     DateTime? createdAt,
     this.triageResult,
+    this.relativeTime,
+    this.audioDuration,
+    this.progressText,
+    this.progressPercent,
+    this.syncStatusText,
   })  : id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now();
 
@@ -40,6 +88,12 @@ class Meeting {
   /// Null until the first AI triage pass completes.
   final TriageResult? triageResult;
 
+  final String? relativeTime;
+  final String? audioDuration;
+  final String? progressText;
+  final double? progressPercent;
+  final String? syncStatusText;
+
   // ── copyWith ──────────────────────────────────────────────────────────────
   Meeting copyWith({
     String? title,
@@ -53,6 +107,11 @@ class Meeting {
     List<String>? tags,
     TriageResult? triageResult,
     bool clearTriageResult = false,
+    String? relativeTime,
+    String? audioDuration,
+    String? progressText,
+    double? progressPercent,
+    String? syncStatusText,
   }) {
     return Meeting(
       id: id,
@@ -68,6 +127,11 @@ class Meeting {
       createdAt: createdAt,
       triageResult:
           clearTriageResult ? null : (triageResult ?? this.triageResult),
+      relativeTime: relativeTime ?? this.relativeTime,
+      audioDuration: audioDuration ?? this.audioDuration,
+      progressText: progressText ?? this.progressText,
+      progressPercent: progressPercent ?? this.progressPercent,
+      syncStatusText: syncStatusText ?? this.syncStatusText,
     );
   }
 
@@ -97,6 +161,11 @@ class Meeting {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'] as String)
           : null,
+      relativeTime: json['relativeTime'] as String?,
+      audioDuration: json['audioDuration'] as String?,
+      progressText: json['progressText'] as String?,
+      progressPercent: (json['progressPercent'] as num?)?.toDouble(),
+      syncStatusText: json['syncStatusText'] as String?,
     );
   }
 
@@ -112,5 +181,10 @@ class Meeting {
         'priority': priority.name,
         'tags': tags,
         'createdAt': createdAt.toIso8601String(),
+        'relativeTime': relativeTime,
+        'audioDuration': audioDuration,
+        'progressText': progressText,
+        'progressPercent': progressPercent,
+        'syncStatusText': syncStatusText,
       };
 }
