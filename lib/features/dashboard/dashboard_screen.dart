@@ -214,13 +214,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     // Context & Greeting Header
                     _GreetingSection(
-                      totalMeetings: provider.totalMeetings,
+                      processedMeetings: provider.processedMeetings,
                       pendingActions: provider.pendingActionItems,
                     ),
                     const SizedBox(height: 16),
 
                     // 3-Column Metric KPI Precision Grid
-                    _KpiMetricGrid(provider: provider),
+                    _KpiMetricGrid(
+                      provider: provider,
+                      onTapTotal: () {
+                        setState(() => _selectedFilterTab = 1);
+                      },
+                      onTapProcessed: () {
+                        setState(() => _selectedFilterTab = 0);
+                      },
+                      onTapActions: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ActionItemsScreen(),
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 16),
 
                     // Segmented Control Filter Tabs
@@ -468,15 +484,52 @@ class _StitchHeaderBar extends StatelessWidget {
 
 class _GreetingSection extends StatelessWidget {
   const _GreetingSection({
-    required this.totalMeetings,
+    required this.processedMeetings,
     required this.pendingActions,
   });
 
-  final int totalMeetings;
+  final int processedMeetings;
   final int pendingActions;
+
+  static String _formatDate(DateTime dt) {
+    const weekdays = [
+      'MONDAY',
+      'TUESDAY',
+      'WEDNESDAY',
+      'THURSDAY',
+      'FRIDAY',
+      'SATURDAY',
+      'SUNDAY'
+    ];
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC'
+    ];
+    return 'TODAY · ${weekdays[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}';
+  }
+
+  static String _greeting(DateTime dt) {
+    if (dt.hour < 12) return 'Good morning, Muneeb';
+    if (dt.hour < 17) return 'Good afternoon, Muneeb';
+    return 'Good evening, Muneeb';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final meetingWord = processedMeetings == 1 ? 'meeting' : 'meetings';
+    final actionWord = pendingActions == 1 ? 'action item' : 'action items';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -485,7 +538,7 @@ class _GreetingSection extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'TODAY · WEDNESDAY, OCT 23',
+              _formatDate(now),
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
@@ -528,7 +581,7 @@ class _GreetingSection extends StatelessWidget {
 
         // Greeting
         Text(
-          'Good morning, Muneeb',
+          _greeting(now),
           style: GoogleFonts.inter(
             fontSize: 22,
             fontWeight: FontWeight.w600,
@@ -538,7 +591,7 @@ class _GreetingSection extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         Text(
-          '$totalMeetings meetings triaged · $pendingActions action items tracking',
+          '$processedMeetings $meetingWord triaged · $pendingActions $actionWord tracking',
           style: GoogleFonts.inter(
             fontSize: 13,
             color: AppColors.textSecondary,
@@ -554,12 +607,34 @@ class _GreetingSection extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _KpiMetricGrid extends StatelessWidget {
-  const _KpiMetricGrid({required this.provider});
+  const _KpiMetricGrid({
+    required this.provider,
+    this.onTapTotal,
+    this.onTapProcessed,
+    this.onTapActions,
+  });
 
   final MeetingProvider provider;
+  final VoidCallback? onTapTotal;
+  final VoidCallback? onTapProcessed;
+  final VoidCallback? onTapActions;
 
   @override
   Widget build(BuildContext context) {
+    final totalMeetings = provider.totalMeetings;
+    final totalUnit = totalMeetings == 1 ? 'mtg' : 'mtgs';
+    final recordedHoursStr =
+        '${provider.recordedHours.toStringAsFixed(1)}h recorded';
+
+    final processedCount = provider.processedMeetings;
+    final processedPct = provider.processedPercentage;
+    final processedSubtext = provider.processedStatusText;
+    final isAllProcessed = processedPct == 100 && totalMeetings > 0;
+
+    final pendingActions = provider.pendingActionItems;
+    final dueToday = provider.actionsDueToday;
+    final completedActions = provider.completedActionItems;
+
     return Container(
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
@@ -575,10 +650,11 @@ class _KpiMetricGrid extends StatelessWidget {
               label: 'Total',
               icon: Icons.calendar_today_rounded,
               iconColor: AppColors.outline,
-              value: '${provider.totalMeetings}',
-              unit: 'mtgs',
-              subtext: '${provider.recordedHours}h recorded',
+              value: '$totalMeetings',
+              unit: totalUnit,
+              subtext: recordedHoursStr,
               subtextColor: AppColors.textSecondary,
+              onTap: onTapTotal,
             ),
           ),
           const SizedBox(width: 6),
@@ -588,12 +664,16 @@ class _KpiMetricGrid extends StatelessWidget {
             child: _KpiCard(
               label: 'Processed',
               icon: Icons.check_circle_rounded,
-              iconColor: AppColors.tertiary,
-              value: '${provider.processedMeetings}',
-              unit: '${provider.processedPercentage}%',
-              unitColor: AppColors.tertiary,
-              subtext: 'All synthesized',
-              subtextColor: AppColors.tertiaryFixedDim,
+              iconColor: isAllProcessed ? AppColors.tertiary : AppColors.outline,
+              value: '$processedCount',
+              unit: '$processedPct%',
+              unitColor:
+                  isAllProcessed ? AppColors.tertiary : AppColors.outline,
+              subtext: processedSubtext,
+              subtextColor: isAllProcessed
+                  ? AppColors.tertiaryFixedDim
+                  : AppColors.textSecondary,
+              onTap: onTapProcessed,
             ),
           ),
           const SizedBox(width: 6),
@@ -604,26 +684,48 @@ class _KpiMetricGrid extends StatelessWidget {
               label: 'Actions',
               icon: Icons.checklist_rounded,
               iconColor: AppColors.primary,
-              value: '${provider.pendingActionItems}',
+              value: '$pendingActions',
               unit: 'open',
-              customFooter: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 5,
-                  vertical: 1.5,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.danger.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${provider.actionsDueToday} due today',
-                  style: GoogleFonts.inter(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.danger,
-                  ),
-                ),
-              ),
+              onTap: onTapActions,
+              customFooter: dueToday > 0
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.danger.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$dueToday due today',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.tertiary.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        completedActions > 0
+                            ? '$completedActions completed'
+                            : 'All caught up',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.tertiary,
+                        ),
+                      ),
+                    ),
             ),
           ),
         ],
@@ -643,6 +745,7 @@ class _KpiCard extends StatelessWidget {
     this.subtext,
     this.subtextColor,
     this.customFooter,
+    this.onTap,
   });
 
   final String label;
@@ -654,76 +757,87 @@ class _KpiCard extends StatelessWidget {
   final String? subtext;
   final Color? subtextColor;
   final Widget? customFooter;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.outline,
-                ),
-              ),
-              Icon(icon, size: 14, color: iconColor),
-            ],
+        splashColor: AppColors.primary.withValues(alpha: 0.1),
+        highlightColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.5),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainer,
+            borderRadius: BorderRadius.circular(8),
           ),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                value,
-                style: GoogleFonts.inter(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(width: 4),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  unit,
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: unitColor ?? AppColors.outline,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.outline,
+                    ),
                   ),
-                ),
+                  Icon(icon, size: 14, color: iconColor),
+                ],
               ),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    value,
+                    style: GoogleFonts.inter(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      unit,
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: unitColor ?? AppColors.outline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              if (customFooter != null)
+                customFooter!
+              else if (subtext != null)
+                Text(
+                  subtext!,
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w400,
+                    color: subtextColor ?? AppColors.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
             ],
           ),
-          const SizedBox(height: 3),
-          if (customFooter != null)
-            customFooter!
-          else if (subtext != null)
-            Text(
-              subtext!,
-              style: GoogleFonts.inter(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w400,
-                color: subtextColor ?? AppColors.textSecondary,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-        ],
+        ),
       ),
     );
   }

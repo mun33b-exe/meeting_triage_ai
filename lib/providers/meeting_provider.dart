@@ -60,24 +60,32 @@ class MeetingProvider extends ChangeNotifier {
     return ((processedMeetings / _meetings.length) * 100).round();
   }
 
+  String get processedStatusText {
+    if (_meetings.isEmpty) return 'No meetings';
+    if (processedPercentage == 100) return 'All synthesized';
+    final remaining = _meetings.length - processedMeetings;
+    if (remaining == 0) return 'All synthesized';
+    return '$remaining pending triage';
+  }
+
   int get _totalActionItems => _meetings
       .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
       .length;
 
-  int get pendingActionItems {
-    final count = _meetings
-        .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
-        .where((a) => !a.isCompleted)
-        .length;
-    return count > 0 ? count : 9;
-  }
+  int get pendingActionItems => _meetings
+      .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
+      .where((a) => !a.isCompleted)
+      .length;
 
   int get completedActionItems => _meetings
       .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
       .where((a) => a.isCompleted)
       .length;
 
-  int get actionsDueToday => 2;
+  int get actionsDueToday => _meetings
+      .expand((m) => m.triageResult?.actionItems ?? <ActionItem>[])
+      .where((a) => !a.isCompleted && a.isDueToday)
+      .length;
 
   /// 0.0–1.0; returns 0.0 when there are no action items.
   double get actionCompletionRate {
@@ -169,7 +177,7 @@ class MeetingProvider extends ChangeNotifier {
     return list;
   }
 
-  /// Flips `isCompleted` on a single action item in-place.
+  /// Flips `isCompleted` on a single action item in-place and updates meeting metrics.
   void toggleActionItem(String meetingId, String actionItemId) {
     final mIdx = _meetings.indexWhere((m) => m.id == meetingId);
     if (mIdx == -1) return;
@@ -178,6 +186,19 @@ class MeetingProvider extends ChangeNotifier {
     final aIdx = items.indexWhere((a) => a.id == actionItemId);
     if (aIdx == -1) return;
     items[aIdx].isCompleted = !items[aIdx].isCompleted;
+
+    final completedCount = items.where((a) => a.isCompleted).length;
+    final totalCount = items.length;
+    final percent = totalCount == 0 ? 0.0 : completedCount / totalCount;
+    final isAllCompleted = completedCount == totalCount && totalCount > 0;
+
+    _meetings[mIdx] = _meetings[mIdx].copyWith(
+      progressPercent: percent,
+      progressText: '$completedCount of $totalCount items completed',
+      status: isAllCompleted && _meetings[mIdx].status != MeetingStatus.synced
+          ? MeetingStatus.completed
+          : _meetings[mIdx].status,
+    );
     notifyListeners();
   }
 
@@ -251,7 +272,13 @@ class MeetingProvider extends ChangeNotifier {
               meetingId: m1,
               title: 'Draft vendor SLA commitment terms',
               assignedTo: 'Sarah Chen',
-              dueDate: DateTime.now().add(const Duration(days: 3)),
+              dueDate: DateTime(
+                DateTime.now().year,
+                DateTime.now().month,
+                DateTime.now().day,
+                17,
+                0,
+              ),
               priority: ActionPriority.high,
               isCompleted: false,
             ),
@@ -331,7 +358,13 @@ class MeetingProvider extends ChangeNotifier {
               meetingId: m2,
               title: 'Sync backlog tickets directly to Linear roadmap',
               assignedTo: 'Marcus Rivera',
-              dueDate: DateTime.now().add(const Duration(days: 2)),
+              dueDate: DateTime(
+                DateTime.now().year,
+                DateTime.now().month,
+                DateTime.now().day,
+                18,
+                0,
+              ),
               priority: ActionPriority.medium,
               isCompleted: false,
             ),
